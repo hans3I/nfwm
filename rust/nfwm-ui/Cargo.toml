@@ -6,8 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-# nfwm-core = { path = "../nfwm-core" }
-# nfwm-win32 = { path = "../nfwm-win32" }
-# UI framework TBD (egui, tauri, native win32)
+nfwm-core = { path = "../nfwm-core" }
+nfwm-win32 = { path = "../nfwm-win32" }
 
 [dev-dependencies]

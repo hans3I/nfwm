@@ -10,10 +10,10 @@ name = "nfwm"
 path = "src/main.rs"
 
 [dependencies]
-# nfwm-core = { path = "../nfwm-core" }
-# nfwm-win32 = { path = "../nfwm-win32" }
-# nfwm-ui = { path = "../nfwm-ui" }
-# tracing = { workspace = true }
-# clap = { version = "4.0", features = ["derive"] }
+nfwm-core = { path = "../nfwm-core" }
+nfwm-win32 = { path = "../nfwm-win32" }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
 
 [dev-dependencies]

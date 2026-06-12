@@ -6,10 +6,9 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-# Pure logic crate - no OS dependencies
-# serde = { workspace = true, optional = true }
-# tracing = { workspace = true, optional = true }
-# thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 # Property testing, etc.
