@@ -6,9 +6,11 @@
 pub mod display;
 pub mod hooks;
 pub mod ipc;
+pub mod virtual_desktop;
 pub mod window;
 
 pub use display::*;
 pub use hooks::*;
 pub use ipc::*;
+pub use virtual_desktop::*;
 pub use window::*;

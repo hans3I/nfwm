@@ -5,6 +5,56 @@ use nfwm_core::types::{DisplayId, Rectangle};
 use windows::Win32::Foundation::{BOOL, LPARAM, RECT};
 use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HMONITOR, MONITORINFO};
 
+// Raw Win32 import for EnumDisplaySettingsW.
+extern "system" {
+    fn EnumDisplaySettingsW(
+        lpszdevicename: *const u16,
+        imodenum: u32,
+        lpdevmode: *mut DEVMODEW,
+    ) -> BOOL;
+}
+
+#[repr(C)]
+#[derive(Debug, Default)]
+#[allow(clippy::upper_case_acronyms, non_snake_case)]
+struct DEVMODEW {
+    dmDeviceName: [u16; 32],
+    dmSpecVersion: u16,
+    dmDriverVersion: u16,
+    dmSize: u16,
+    dmDriverExtra: u16,
+    dmFields: u32,
+    // Union: dmOrientation, dmPaperSize, dmPaperLength, dmPaperWidth
+    dmOrientation: i16,
+    dmPaperSize: i16,
+    dmPaperLength: i16,
+    dmPaperWidth: i16,
+    dmScale: i16,
+    dmCopies: i16,
+    dmDefaultSource: i16,
+    dmPrintQuality: i16,
+    dmColor: i16,
+    dmDuplex: i16,
+    dmYResolution: i16,
+    dmTTOption: i16,
+    dmCollate: i16,
+    dmFormName: [u16; 32],
+    dmLogPixels: u16,
+    dmBitsPerPel: u32,
+    dmPelsWidth: u32,
+    dmPelsHeight: u32,
+    dmDisplayFlags: u32,
+    dmDisplayFrequency: u32,
+    dmICMMethod: u32,
+    dmICMIntent: u32,
+    dmMediaType: u32,
+    dmDitherType: u32,
+    dmReserved1: u32,
+    dmReserved2: u32,
+    dmPanningWidth: u32,
+    dmPanningHeight: u32,
+}
+
 /// A native Win32 display manager that queries connected monitors.
 pub struct Win32DisplayManager;
 
@@ -130,7 +180,17 @@ impl DisplayProvider for Win32DisplayManager {
     }
 
     fn refresh_rate(&self, _id: DisplayId) -> Option<f32> {
-        // TODO: Query DEVMODE in Phase 08
-        None
+        // Query current display settings for the primary display
+        let mut devmode = DEVMODEW {
+            dmSize: std::mem::size_of::<DEVMODEW>() as u16,
+            ..Default::default()
+        };
+        // SAFETY: EnumDisplaySettingsW is a well-defined API; devmode is properly sized
+        let result = unsafe { EnumDisplaySettingsW(std::ptr::null(), 0xFFFFFFFF, &mut devmode) };
+        if result.as_bool() && devmode.dmDisplayFrequency > 0 {
+            Some(devmode.dmDisplayFrequency as f32)
+        } else {
+            None
+        }
     }
 }

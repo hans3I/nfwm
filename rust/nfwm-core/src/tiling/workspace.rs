@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::layout::DesktopTree;
-use crate::types::{NodeId, Rectangle, VirtualDesktopId, WindowId};
+use crate::types::{DisplayId, NodeId, Rectangle, VirtualDesktopId, WindowId};
 
 /// State for a single virtual desktop.
 #[derive(Debug, Clone)]
@@ -18,6 +18,8 @@ pub struct DesktopState {
     pub floating: Vec<WindowId>,
     /// Whether tiling is active on this desktop.
     pub active: bool,
+    /// The display this desktop is currently on.
+    pub display_id: Option<DisplayId>,
 }
 
 impl DesktopState {
@@ -27,6 +29,17 @@ impl DesktopState {
             focused_node: None,
             floating: Vec::new(),
             active: true,
+            display_id: None,
+        }
+    }
+
+    pub fn with_display(tree: DesktopTree, display_id: DisplayId) -> Self {
+        Self {
+            tree,
+            focused_node: None,
+            floating: Vec::new(),
+            active: true,
+            display_id: Some(display_id),
         }
     }
 }
@@ -59,6 +72,36 @@ impl TilingWorkspace {
         self.desktops
             .entry(id)
             .or_insert_with(|| DesktopState::new(DesktopTree::new(work_area)))
+    }
+
+    /// Get or create a desktop state on a specific display.
+    pub fn get_or_create_on_display(
+        &mut self,
+        id: VirtualDesktopId,
+        work_area: Rectangle,
+        display_id: DisplayId,
+    ) -> &mut DesktopState {
+        let state = self
+            .desktops
+            .entry(id)
+            .or_insert_with(|| DesktopState::with_display(DesktopTree::new(work_area), display_id));
+        state.display_id = Some(display_id);
+        state
+    }
+
+    /// Find a desktop by display ID.
+    pub fn find_by_display(&self, display_id: DisplayId) -> Option<VirtualDesktopId> {
+        self.desktops
+            .iter()
+            .find(|(_, state)| state.display_id == Some(display_id))
+            .map(|(id, _)| *id)
+    }
+
+    /// Update the work area for a desktop's tree.
+    pub fn update_work_area(&mut self, id: VirtualDesktopId, work_area: Rectangle) {
+        if let Some(state) = self.get_mut(id) {
+            state.tree.work_area = work_area;
+        }
     }
 
     /// Get a desktop state.
