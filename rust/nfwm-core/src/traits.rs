@@ -124,6 +124,8 @@ pub enum PlacementError {
     AccessDenied,
     #[error("Invalid bounds")]
     InvalidBounds,
+    #[error("Win32 API error: {0}")]
+    Api(String),
 }
 
 /// A fake window provider for testing core logic without real windows.

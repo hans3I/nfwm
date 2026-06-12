@@ -158,8 +158,25 @@ impl TilingService {
         newly_managed
     }
 
+    pub fn sync_window_set(&mut self, windows: &[WindowId]) -> Vec<WindowId> {
+        let removed: Vec<WindowId> = self
+            .registry
+            .ids()
+            .into_iter()
+            .filter(|id| !windows.contains(id))
+            .collect();
+
+        for id in &removed {
+            self.registry.remove(*id);
+            self.workspace.unregister_window(*id);
+        }
+
+        removed
+    }
+
     fn add_window(&mut self, window_id: WindowId) {
         let desktop_id = self.workspace.current_desktop();
+        self.workspace.get_or_create(desktop_id, self.default_work_area);
         let node_id = self.workspace.register_window(desktop_id, window_id);
         self.node_to_window.insert(node_id, window_id);
         let tree = self.workspace.current_tree_mut().unwrap();
@@ -185,6 +202,12 @@ impl TilingService {
             tree.measure();
             tree.arrange();
         }
+    }
+
+    pub fn set_work_area(&mut self, work_area: Rectangle) {
+        self.default_work_area = work_area;
+        let desktop_id = self.workspace.current_desktop();
+        self.workspace.update_work_area(desktop_id, work_area);
     }
 
     // --- Focus queries ---
@@ -693,9 +716,10 @@ impl TilingService {
     ) -> Vec<PlacementResult> {
         let mut results = Vec::new();
         if let Some(tree) = self.workspace.current_tree() {
+            let work_area = tree.work_area;
             for node in tree.windows() {
                 if let Some(window_id) = node.window_id {
-                    let rect = node.computed_rect;
+                    let rect = node.computed_rect.clamp_within(work_area);
                     if rect.is_empty() {
                         continue;
                     }
@@ -850,6 +874,25 @@ mod tests {
     fn service_discover_adds_window() {
         let (service, _provider, id) = setup_service();
         assert!(service.workspace.is_managed(id));
+    }
+
+    #[test]
+    fn service_discover_removes_closed_window() {
+        let (mut service, mut provider, id) = setup_service();
+        let id2 = add_second_window(&mut service, &mut provider);
+        assert!(service.workspace.is_managed(id2));
+
+        provider.windows.remove(&id2);
+        let removed = service.sync_window_set(&[id]);
+
+        assert_eq!(removed, vec![id2]);
+        assert!(!service.workspace.is_managed(id2));
+    }
+
+    #[test]
+    fn service_uses_configured_work_area() {
+        let (service, _provider, _id) = setup_service();
+        assert_eq!(service.get_bounds(), Some(Rectangle::new(0, 0, 1000, 600)));
     }
 
     #[test]
@@ -1087,6 +1130,26 @@ mod tests {
         assert!(results.iter().all(|r| r.success));
         // Shadow mode should not actually place
         assert_eq!(fake.placements.borrow().len(), 0);
+    }
+
+    #[test]
+    fn service_apply_layout_clamps_to_work_area() {
+        let (mut service, mut provider, id) = setup_service();
+        let id2 = add_second_window(&mut service, &mut provider);
+        service.set_work_area(Rectangle::new(0, 0, 400, 200));
+        service.refresh();
+
+        let fake = crate::traits::fake_placement::FakePlacementProviderMut::new();
+        let results = service.apply_layout(&fake, false);
+
+        assert_eq!(results.len(), 2);
+        for window_id in [id, id2] {
+            let rect = fake.get(window_id).unwrap();
+            assert!(rect.x >= 0);
+            assert!(rect.y >= 0);
+            assert!(rect.x + rect.width <= 400);
+            assert!(rect.y + rect.height <= 200);
+        }
     }
 
     #[test]

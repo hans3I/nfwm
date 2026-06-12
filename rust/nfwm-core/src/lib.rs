@@ -4,6 +4,7 @@
 //! real Windows windows or displays.
 
 pub mod commands;
+pub mod input;
 pub mod layout;
 pub mod settings;
 pub mod tiling;

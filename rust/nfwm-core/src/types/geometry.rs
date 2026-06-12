@@ -80,6 +80,19 @@ impl Rectangle {
             && point.y >= self.y
             && point.y <= self.y + self.height
     }
+
+    pub fn clamp_within(&self, bounds: Rectangle) -> Rectangle {
+        if self.is_empty() || bounds.is_empty() {
+            return Rectangle::default();
+        }
+
+        let left = self.x.max(bounds.x);
+        let top = self.y.max(bounds.y);
+        let right = (self.x + self.width).min(bounds.x + bounds.width);
+        let bottom = (self.y + self.height).min(bounds.y + bounds.height);
+
+        Rectangle::new(left, top, (right - left).max(0), (bottom - top).max(0))
+    }
 }
 
 #[cfg(test)]
@@ -112,5 +125,12 @@ mod tests {
         assert!(Size::new(10, 0).is_empty());
         assert!(Size::new(-1, 10).is_empty());
         assert!(!Size::new(10, 10).is_empty());
+    }
+
+    #[test]
+    fn rectangle_clamp_within_bounds() {
+        let rect = Rectangle::new(-50, 10, 200, 150);
+        let clamped = rect.clamp_within(Rectangle::new(0, 0, 100, 100));
+        assert_eq!(clamped, Rectangle::new(0, 10, 100, 90));
     }
 }

@@ -1,5 +1,6 @@
 use nfwm_core::traits::{PlacementError, WindowProvider};
 use nfwm_core::types::{DisplayId, ProcessId, Rectangle, Size, VirtualDesktopId, WindowId};
+use tracing::warn;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -347,6 +348,20 @@ impl nfwm_core::traits::PlacementProvider for Win32PlacementProvider {
         if hwnd.0 == 0 {
             return Err(PlacementError::WindowNotFound);
         }
+        if rect.width <= 0 || rect.height <= 0 {
+            return Err(PlacementError::InvalidBounds);
+        }
+
+        // Restore maximized/minimized windows before moving them.
+        if unsafe { IsIconic(hwnd).as_bool() || IsZoomed(hwnd).as_bool() } {
+            unsafe {
+                windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                    hwnd,
+                    windows::Win32::UI::WindowsAndMessaging::SW_RESTORE,
+                );
+            }
+        }
+
         // SAFETY: hwnd is valid; we use SWP_NOZORDER | SWP_NOACTIVATE to avoid focus side effects
         let result = unsafe {
             windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
@@ -363,7 +378,21 @@ impl nfwm_core::traits::PlacementProvider for Win32PlacementProvider {
         if result.is_ok() {
             Ok(())
         } else {
-            Err(PlacementError::AccessDenied)
+            let error = std::io::Error::last_os_error();
+            warn!(
+                "[DEBUG-place] SetWindowPos failed for {:?} to {}x{} at ({},{}): {}",
+                id,
+                rect.width,
+                rect.height,
+                rect.x,
+                rect.y,
+                error
+            );
+            if error.raw_os_error() == Some(5) {
+                Err(PlacementError::AccessDenied)
+            } else {
+                Err(PlacementError::Api(error.to_string()))
+            }
         }
     }
 
