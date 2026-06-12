@@ -1,9 +1,11 @@
 use nfwm_core::traits::{PlacementError, WindowProvider};
 use nfwm_core::types::{DisplayId, ProcessId, Rectangle, Size, VirtualDesktopId, WindowId};
-use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowTextW, IsIconic,
-    IsWindowVisible, IsZoomed, GWL_EXSTYLE, GWL_STYLE, WS_EX_TOPMOST, WS_SIZEBOX, WS_THICKFRAME,
+    IsWindowVisible, IsZoomed, SendMessageW, GWL_EXSTYLE, GWL_STYLE, WM_GETMINMAXINFO,
+    WS_EX_TOPMOST, WS_SIZEBOX, WS_THICKFRAME,
 };
 
 /// Error type for Win32 operations.
@@ -91,11 +93,30 @@ impl Win32WindowManager {
         } else {
             "fixed"
         };
+        let dpi = self
+            .get_dpi(id)
+            .map(|d| format!(" DPI: {:.0}", d))
+            .unwrap_or_default();
 
         format!(
-            "[{}] '{}' (class: {}) [{}] {} {} {} {} {}",
-            pid, title, class, bounds, visible, minimized, maximized, topmost, resizable
+            "[{}] '{}' (class: {}) [{}] {} {} {} {} {} {}",
+            pid, title, class, bounds, visible, minimized, maximized, topmost, resizable, dpi
         )
+    }
+
+    /// Get the DPI of the display a window is on.
+    pub fn get_dpi(&self, id: WindowId) -> Option<f32> {
+        let hwnd = id_to_hwnd(id);
+        if hwnd.0 == 0 {
+            return None;
+        }
+        // SAFETY: hwnd is valid; GetDpiForWindow is available on Windows 8.1+
+        let dpi = unsafe { GetDpiForWindow(hwnd) };
+        if dpi > 0 {
+            Some(dpi as f32)
+        } else {
+            None
+        }
     }
 }
 
@@ -116,6 +137,18 @@ fn rect_from_win32(rect: RECT) -> Rectangle {
         width: rect.right - rect.left,
         height: rect.bottom - rect.top,
     }
+}
+
+/// Win32 MINMAXINFO structure for WM_GETMINMAXINFO.
+#[repr(C)]
+#[derive(Debug, Default)]
+#[allow(clippy::upper_case_acronyms)]
+struct MINMAXINFO {
+    pt_reserved: POINT,
+    pt_max_size: POINT,
+    pt_max_position: POINT,
+    pt_min_track_size: POINT,
+    pt_max_track_size: POINT,
 }
 
 // SAFETY: LPARAM is the pointer to a Vec<WindowId> passed from enumerate_windows
@@ -236,14 +269,45 @@ impl WindowProvider for Win32WindowManager {
         (style.0 & WS_THICKFRAME.0) != 0 || (style.0 & WS_SIZEBOX.0) != 0
     }
 
-    fn min_size(&self, _id: WindowId) -> Option<Size> {
-        // TODO: Query WM_GETMINMAXINFO in Phase 07
-        None
+    fn min_size(&self, id: WindowId) -> Option<Size> {
+        let hwnd = id_to_hwnd(id);
+        if hwnd.0 == 0 {
+            return None;
+        }
+        let mut mmi = MINMAXINFO::default();
+        // SAFETY: hwnd is valid; mmi is a valid mutable reference
+        let result = unsafe {
+            SendMessageW(
+                hwnd,
+                WM_GETMINMAXINFO,
+                WPARAM(0),
+                LPARAM(&mut mmi as *mut _ as isize),
+            )
+        };
+        if result != LRESULT(0) || mmi.pt_min_track_size.x > 0 || mmi.pt_min_track_size.y > 0 {
+            Some(Size::new(mmi.pt_min_track_size.x, mmi.pt_min_track_size.y))
+        } else {
+            None
+        }
     }
 
-    fn display_id(&self, _id: WindowId) -> Option<DisplayId> {
-        // TODO: Use MonitorFromWindow in Phase 08
-        None
+    fn display_id(&self, id: WindowId) -> Option<DisplayId> {
+        let hwnd = id_to_hwnd(id);
+        if hwnd.0 == 0 {
+            return None;
+        }
+        // SAFETY: hwnd is valid
+        let hmonitor = unsafe {
+            windows::Win32::Graphics::Gdi::MonitorFromWindow(
+                hwnd,
+                windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST,
+            )
+        };
+        if hmonitor.is_invalid() {
+            None
+        } else {
+            Some(DisplayId(hmonitor.0 as usize))
+        }
     }
 
     fn virtual_desktop_id(&self, _id: WindowId) -> Option<VirtualDesktopId> {

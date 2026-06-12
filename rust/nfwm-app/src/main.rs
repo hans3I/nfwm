@@ -3,7 +3,7 @@ use nfwm_core::tiling::TilingService;
 use nfwm_core::traits::{DisplayProvider, WindowProvider};
 use nfwm_core::window::DiscoveryService;
 use nfwm_win32::display::Win32DisplayManager;
-use nfwm_win32::window::Win32WindowManager;
+use nfwm_win32::window::{Win32PlacementProvider, Win32WindowManager};
 use tracing::{info, warn};
 
 #[derive(Parser)]
@@ -95,12 +95,60 @@ fn run_shadow_mode() {
     if let Some(tree) = tiling.workspace().current_tree() {
         info!("Layout tree:\n{}", tree.visualize());
     }
+
+    // Shadow-mode placement: log what the engine would do
+    let placement = Win32PlacementProvider::new();
+    let results = tiling.apply_layout(&placement, true);
+    info!("Shadow placements ({} windows):", results.len());
+    for r in results.iter().take(10) {
+        info!(
+            "  {:?} -> {}x{} at ({},{})",
+            r.window_id, r.rect.width, r.rect.height, r.rect.x, r.rect.y
+        );
+    }
+    if results.len() > 10 {
+        info!("  ... and {} more", results.len() - 10);
+    }
     info!("Shadow mode complete. No windows were moved.");
 }
 
 fn run_normal() {
     info!("Normal mode: starting tiling manager");
+    let wm = Win32WindowManager::new();
+    let placement = Win32PlacementProvider::new();
+    let mut discovery = DiscoveryService::new();
+    let mut tiling = TilingService::new();
+    tiling.start();
+
+    // Initial discovery and placement
+    let (new, removed) = discovery.refresh(&wm, &|| wm.enumerate_windows());
+    info!(
+        "Discovered {} windows ({} new, {} removed)",
+        discovery.registry().len(),
+        new.len(),
+        removed.len()
+    );
+
+    let windows = discovery.registry().ids();
+    let managed = tiling.discover(&wm, &windows);
+    info!("Managed {} windows", managed.len());
+    if let Some(focused) = discovery.registry().focused() {
+        if let Some(node) = tiling.workspace().find_node(focused) {
+            tiling.workspace_mut().set_focus(node);
+        }
+    }
+    tiling.refresh();
+    let results = tiling.apply_layout(&placement, false);
+    info!("Placed {} windows", results.len());
+    for r in &results {
+        if !r.success {
+            warn!("Failed to place {:?}: {:?}", r.window_id, r.error);
+        }
+    }
+
     info!("Normal mode startup complete.");
+    // TODO: In a real implementation, run a message loop here.
+    // For Phase 07, we exit immediately after initial placement.
 }
 
 fn send_action(name: &str) {

@@ -679,6 +679,81 @@ impl TilingService {
     pub fn workspace_mut(&mut self) -> &mut TilingWorkspace {
         &mut self.workspace
     }
+
+    // --- Placement engine ---
+
+    /// Apply the current layout to all tiled windows.
+    ///
+    /// If `shadow` is true, placements are logged but not applied.
+    /// Returns a list of placement results for each window.
+    pub fn apply_layout(
+        &self,
+        placement: &dyn crate::traits::PlacementProvider,
+        shadow: bool,
+    ) -> Vec<PlacementResult> {
+        let mut results = Vec::new();
+        if let Some(tree) = self.workspace.current_tree() {
+            for node in tree.windows() {
+                if let Some(window_id) = node.window_id {
+                    let rect = node.computed_rect;
+                    if rect.is_empty() {
+                        continue;
+                    }
+                    if shadow {
+                        results.push(PlacementResult {
+                            window_id,
+                            rect,
+                            success: true,
+                            error: None,
+                        });
+                    } else {
+                        let result = placement.set_bounds(window_id, rect);
+                        results.push(PlacementResult {
+                            window_id,
+                            rect,
+                            success: result.is_ok(),
+                            error: result.err().map(|e| e.to_string()),
+                        });
+                    }
+                }
+            }
+        }
+        results
+    }
+
+    /// Restore windows to their original bounds.
+    ///
+    /// Uses the registry's `original_bounds` for each window.
+    pub fn restore_layout(
+        &self,
+        placement: &dyn crate::traits::PlacementProvider,
+        windows: &[WindowId],
+    ) -> Vec<PlacementResult> {
+        let mut results = Vec::new();
+        for &window_id in windows {
+            if let Some(entry) = self.registry.get(window_id) {
+                if let Some(original) = entry.original_bounds {
+                    let result = placement.set_bounds(window_id, original);
+                    results.push(PlacementResult {
+                        window_id,
+                        rect: original,
+                        success: result.is_ok(),
+                        error: result.err().map(|e| e.to_string()),
+                    });
+                }
+            }
+        }
+        results
+    }
+}
+
+/// Result of a single placement operation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlacementResult {
+    pub window_id: WindowId,
+    pub rect: Rectangle,
+    pub success: bool,
+    pub error: Option<String>,
 }
 
 impl Default for TilingService {
@@ -985,5 +1060,44 @@ mod tests {
             service.resize(PanelOrientation::Horizontal, 10),
             Err(TilingError::NotActive)
         );
+    }
+
+    #[test]
+    fn service_apply_layout() {
+        let (mut service, mut provider, id) = setup_service();
+        let _id2 = add_second_window(&mut service, &mut provider);
+        service.refresh();
+
+        let fake = crate::traits::fake_placement::FakePlacementProviderMut::new();
+        let results = service.apply_layout(&fake, false);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|r| r.success));
+        assert!(fake.get(id).is_some());
+    }
+
+    #[test]
+    fn service_apply_layout_shadow() {
+        let (mut service, mut provider, _id) = setup_service();
+        let _id2 = add_second_window(&mut service, &mut provider);
+        service.refresh();
+
+        let fake = crate::traits::fake_placement::FakePlacementProviderMut::new();
+        let results = service.apply_layout(&fake, true);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|r| r.success));
+        // Shadow mode should not actually place
+        assert_eq!(fake.placements.borrow().len(), 0);
+    }
+
+    #[test]
+    fn service_restore_layout() {
+        let (mut service, mut provider, id) = setup_service();
+        let _id2 = add_second_window(&mut service, &mut provider);
+
+        let fake = crate::traits::fake_placement::FakePlacementProviderMut::new();
+        let results = service.restore_layout(&fake, &[id]);
+        assert_eq!(results.len(), 1);
+        assert!(results[0].success);
+        assert_eq!(results[0].rect, Rectangle::new(0, 0, 800, 600));
     }
 }

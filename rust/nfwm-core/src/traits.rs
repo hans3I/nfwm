@@ -232,6 +232,71 @@ pub mod fake {
 }
 
 #[cfg(test)]
+pub mod fake_placement {
+    use super::*;
+    use std::collections::HashMap;
+
+    /// A fake placement provider that records all set_bounds calls.
+    #[derive(Debug, Clone, Default)]
+    pub struct FakePlacementProvider {
+        pub placements: HashMap<WindowId, Rectangle>,
+    }
+
+    impl FakePlacementProvider {
+        pub fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    impl PlacementProvider for FakePlacementProvider {
+        fn set_bounds(&self, _id: WindowId, _rect: Rectangle) -> Result<(), PlacementError> {
+            // Note: self is immutable, but we can't mutate HashMap.
+            // In real tests, use FakePlacementProviderMut instead.
+            Ok(())
+        }
+
+        fn restore(&self, _id: WindowId) -> Result<(), PlacementError> {
+            Ok(())
+        }
+
+        fn minimize(&self, _id: WindowId) -> Result<(), PlacementError> {
+            Ok(())
+        }
+    }
+
+    /// A mutable fake placement provider for testing.
+    #[derive(Debug, Default)]
+    pub struct FakePlacementProviderMut {
+        pub placements: std::cell::RefCell<HashMap<WindowId, Rectangle>>,
+    }
+
+    impl FakePlacementProviderMut {
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        pub fn get(&self, id: WindowId) -> Option<Rectangle> {
+            self.placements.borrow().get(&id).copied()
+        }
+    }
+
+    impl PlacementProvider for FakePlacementProviderMut {
+        fn set_bounds(&self, id: WindowId, rect: Rectangle) -> Result<(), PlacementError> {
+            self.placements.borrow_mut().insert(id, rect);
+            Ok(())
+        }
+
+        fn restore(&self, _id: WindowId) -> Result<(), PlacementError> {
+            Ok(())
+        }
+
+        fn minimize(&self, _id: WindowId) -> Result<(), PlacementError> {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::fake::*;
     use super::*;
