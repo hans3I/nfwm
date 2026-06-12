@@ -151,9 +151,16 @@ pub mod fake {
     }
 
     /// A fake window provider backed by a HashMap.
+    #[derive(Clone)]
     pub struct FakeWindowProvider {
         pub windows: HashMap<WindowId, FakeWindow>,
         pub focused: WindowId,
+    }
+
+    impl Default for FakeWindowProvider {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl FakeWindowProvider {

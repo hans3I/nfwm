@@ -108,8 +108,12 @@ impl TilingNode {
     /// Get the maximum size including padding.
     pub fn max_size(&self) -> Size {
         Size::new(
-            self.content_max_size.width + self.padding.width,
-            self.content_max_size.height + self.padding.height,
+            self.content_max_size
+                .width
+                .saturating_add(self.padding.width),
+            self.content_max_size
+                .height
+                .saturating_add(self.padding.height),
         )
     }
 

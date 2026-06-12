@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
+use nfwm_core::tiling::TilingService;
 use nfwm_core::traits::{DisplayProvider, WindowProvider};
+use nfwm_core::window::DiscoveryService;
 use nfwm_win32::display::Win32DisplayManager;
 use nfwm_win32::window::Win32WindowManager;
 use tracing::{info, warn};
@@ -57,10 +59,41 @@ fn main() {
 fn run_shadow_mode() {
     info!("Shadow mode: discovering windows without moving them");
     let wm = Win32WindowManager::new();
-    let windows = wm.enumerate_windows();
-    info!("Found {} candidate windows", windows.len());
-    for id in windows {
-        info!("{}", wm.describe_window(id));
+    let mut discovery = DiscoveryService::new();
+    let (new, removed) = discovery.refresh(&wm, &|| wm.enumerate_windows());
+    info!(
+        "Found {} windows ({} new, {} removed)",
+        discovery.registry().len(),
+        new.len(),
+        removed.len()
+    );
+    for entry in discovery.registry().all() {
+        let state = match entry.state {
+            nfwm_core::window::classifier::WindowState::Tiled => "tiled",
+            nfwm_core::window::classifier::WindowState::Floating => "floating",
+            nfwm_core::window::classifier::WindowState::Ignored => "ignored",
+        };
+        info!(
+            "[{}] '{}' (class: {}) -> {}",
+            entry.process_id, entry.title, entry.class_name, state
+        );
+    }
+
+    // Shadow-mode tiling service: log what the layout would be
+    info!("Shadow mode: simulating tiling layout");
+    let mut tiling = TilingService::new();
+    tiling.start();
+    let windows = discovery.registry().ids();
+    let managed = tiling.discover(&wm, &windows);
+    info!("Managed {} windows in tiling tree", managed.len());
+    if let Some(focused) = discovery.registry().focused() {
+        if let Some(node) = tiling.workspace().find_node(focused) {
+            tiling.workspace_mut().set_focus(node);
+        }
+    }
+    tiling.refresh();
+    if let Some(tree) = tiling.workspace().current_tree() {
+        info!("Layout tree:\n{}", tree.visualize());
     }
     info!("Shadow mode complete. No windows were moved.");
 }
@@ -81,8 +114,15 @@ fn run_diagnostics() {
     // 1. Enumerate windows
     info!("--- Windows ---");
     let wm = Win32WindowManager::new();
-    let windows = wm.enumerate_windows();
-    info!("Found {} top-level windows", windows.len());
+    let mut discovery = DiscoveryService::new();
+    let (new, removed) = discovery.refresh(&wm, &|| wm.enumerate_windows());
+    let windows = discovery.registry().ids();
+    info!(
+        "Found {} top-level windows ({} new, {} removed)",
+        windows.len(),
+        new.len(),
+        removed.len()
+    );
     for (i, id) in windows.iter().take(10).enumerate() {
         info!("  {}: {}", i + 1, wm.describe_window(*id));
     }
@@ -119,41 +159,34 @@ fn run_diagnostics() {
 
     // 3. Check for focused window
     info!("--- Focus ---");
-    if let Some(focused) = windows.iter().find(|id| wm.is_focused(**id)) {
-        info!("Focused window: {}", wm.describe_window(*focused));
+    if let Some(focused) = discovery.registry().focused() {
+        info!("Focused window: {}", wm.describe_window(focused));
     } else {
         warn!("No focused window found");
     }
 
     // 4. Classification summary
     info!("--- Classification ---");
-    let mut visible = 0;
-    let mut minimized = 0;
-    let mut maximized = 0;
-    let mut topmost = 0;
-    let mut non_resizable = 0;
-    for id in &windows {
-        if wm.is_visible(*id) {
-            visible += 1;
-        }
-        if wm.is_minimized(*id) {
-            minimized += 1;
-        }
-        if wm.is_maximized(*id) {
-            maximized += 1;
-        }
-        if wm.is_topmost(*id) {
-            topmost += 1;
-        }
-        if !wm.is_resizable(*id) {
-            non_resizable += 1;
+    let mut tiled = 0;
+    let mut floating = 0;
+    let mut ignored = 0;
+    for entry in discovery.registry().all() {
+        match entry.state {
+            nfwm_core::window::classifier::WindowState::Tiled => tiled += 1,
+            nfwm_core::window::classifier::WindowState::Floating => floating += 1,
+            nfwm_core::window::classifier::WindowState::Ignored => ignored += 1,
         }
     }
-    info!("  Visible: {}", visible);
-    info!("  Minimized: {}", minimized);
-    info!("  Maximized: {}", maximized);
-    info!("  Topmost: {}", topmost);
-    info!("  Non-resizable: {}", non_resizable);
+    info!("  Tiled: {}", tiled);
+    info!("  Floating: {}", floating);
+    info!("  Ignored: {}", ignored);
+    info!(
+        "  (Visible: {}, Minimized: {}, Maximized: {}, Topmost: {})",
+        windows.iter().filter(|id| wm.is_visible(**id)).count(),
+        windows.iter().filter(|id| wm.is_minimized(**id)).count(),
+        windows.iter().filter(|id| wm.is_maximized(**id)).count(),
+        windows.iter().filter(|id| wm.is_topmost(**id)).count(),
+    );
 
     info!("=== Diagnostics complete ===");
 }

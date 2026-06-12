@@ -290,6 +290,20 @@ impl DesktopTree {
     pub fn remove_node(&mut self, node_id: NodeId) {
         if let Some(parent_id) = self.get_node(node_id).and_then(|n| n.parent) {
             self.detach(parent_id, node_id);
+        } else {
+            if self.root == Some(node_id) {
+                self.root = None;
+            }
+            if let Some(window_id) = self.get_node(node_id).and_then(|n| n.window_id) {
+                self.unregister_window(window_id);
+            }
+        }
+    }
+
+    /// Remove a window from the tree, even if it's the root.
+    pub fn remove_window(&mut self, window_id: WindowId) {
+        if let Some(node_id) = self.find_window_id(window_id) {
+            self.remove_node(node_id);
         }
     }
 

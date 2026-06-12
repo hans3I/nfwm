@@ -6,11 +6,15 @@
 pub mod commands;
 pub mod layout;
 pub mod settings;
+pub mod tiling;
 pub mod traits;
 pub mod types;
+pub mod window;
 
 pub use commands::*;
 pub use layout::*;
 pub use settings::*;
+pub use tiling::*;
 pub use traits::*;
 pub use types::*;
+pub use window::*;
