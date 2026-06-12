@@ -1,0 +1,14 @@
+[package]
+name = "nfwm-win32"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# nfwm-core = { path = "../nfwm-core" }
+# windows = { workspace = true }
+# tracing = { workspace = true }
+# thiserror = { workspace = true }
+
+[dev-dependencies]

@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "nfwm-core",
+    "nfwm-win32",
+    "nfwm-ui",
+    "nfwm-app",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["nfwm Contributors"]
+license = "MIT"
+repository = "https://github.com/hansel/nfwm"
+
+[workspace.dependencies]
+# Core dependencies - to be added as needed
+# windows = "0.52"
+# windows-sys = "0.52"
+# serde = { version = "1.0", features = ["derive"] }
+# tracing = "0.1"
+# thiserror = "1.0"

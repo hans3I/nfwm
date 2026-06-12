@@ -1,0 +1,19 @@
+[package]
+name = "nfwm-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "nfwm"
+path = "src/main.rs"
+
+[dependencies]
+# nfwm-core = { path = "../nfwm-core" }
+# nfwm-win32 = { path = "../nfwm-win32" }
+# nfwm-ui = { path = "../nfwm-ui" }
+# tracing = { workspace = true }
+# clap = { version = "4.0", features = ["derive"] }
+
+[dev-dependencies]
