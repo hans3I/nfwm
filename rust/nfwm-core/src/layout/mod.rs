@@ -1,11 +1,11 @@
 //! Layout engine: tree-based tiling with measure/arrange semantics.
 
-pub mod tree;
+pub mod flex;
 pub mod node;
 pub mod panel;
-pub mod flex;
+pub mod tree;
 
-pub use tree::*;
+pub use flex::*;
 pub use node::*;
 pub use panel::*;
-pub use flex::*;
+pub use tree::*;

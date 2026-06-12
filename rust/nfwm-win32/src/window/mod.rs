@@ -1,9 +1,9 @@
 //! Window abstractions: HWND wrapper, properties, classification.
 
-pub mod window_id;
-pub mod properties;
 pub mod manager;
+pub mod properties;
+pub mod window_id;
 
-pub use window_id::*;
-pub use properties::*;
 pub use manager::*;
+pub use properties::*;
+pub use window_id::*;

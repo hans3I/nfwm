@@ -3,12 +3,12 @@
 //! All `unsafe` Win32 code is isolated in this crate. Core logic in `nfwm-core`
 //! should never call Win32 APIs directly.
 
-pub mod window;
 pub mod display;
 pub mod hooks;
 pub mod ipc;
+pub mod window;
 
-pub use window::*;
 pub use display::*;
 pub use hooks::*;
 pub use ipc::*;
+pub use window::*;
